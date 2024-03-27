@@ -15,6 +15,10 @@
  */
 package com.jagrosh.jmusicbot.playlist;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jagrosh.jmusicbot.BotConfig;
 import com.jagrosh.jmusicbot.utils.OtherUtil;
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
@@ -36,19 +40,20 @@ import java.util.stream.Collectors;
 public class PlaylistLoader
 {
     private final BotConfig config;
-    
+    private final ObjectMapper objectMapper;
+
     public PlaylistLoader(BotConfig config)
     {
         this.config = config;
+        this.objectMapper = new ObjectMapper();
     }
-    
+
     public List<String> getPlaylistNames()
     {
         if(folderExists())
         {
             File folder = new File(OtherUtil.getPath(config.getPlaylistsFolder()).toString());
-            return Arrays.asList(folder.listFiles((pathname) -> pathname.getName().endsWith(".txt")))
-                    .stream().map(f -> f.getName().substring(0,f.getName().length()-4)).collect(Collectors.toList());
+            return Arrays.stream(Objects.requireNonNull(folder.listFiles((pathname) -> pathname.getName().endsWith(".json")))).map(f -> f.getName().substring(0,f.getName().length()-5)).collect(Collectors.toList());
         }
         else
         {
@@ -56,36 +61,47 @@ public class PlaylistLoader
             return Collections.emptyList();
         }
     }
-    
+
     public void createFolder()
     {
         try
         {
             Files.createDirectory(OtherUtil.getPath(config.getPlaylistsFolder()));
-        } 
+        }
         catch (IOException ignore) {}
     }
-    
+
     public boolean folderExists()
     {
         return Files.exists(OtherUtil.getPath(config.getPlaylistsFolder()));
     }
-    
-    public void createPlaylist(String name) throws IOException
+
+    public void createPlaylist(String name, String ownerId, String guildId) throws IOException
     {
-        Files.createFile(OtherUtil.getPath(config.getPlaylistsFolder()+File.separator+name+".txt"));
+        ObjectNode playlist = objectMapper.createObjectNode();
+        playlist.put("name", name);
+        playlist.put("authorId", ownerId);
+        playlist.put("guildId", guildId);
+        playlist.put("shuffle", false);
+        playlist.putArray("tracks");
+        objectMapper.writeValue(new File(OtherUtil.getPath(config.getPlaylistsFolder()+File.separator+name+".json").toString()), playlist);
     }
-    
+
     public void deletePlaylist(String name) throws IOException
     {
-        Files.delete(OtherUtil.getPath(config.getPlaylistsFolder()+File.separator+name+".txt"));
+        Files.delete(OtherUtil.getPath(config.getPlaylistsFolder()+File.separator+name+".json"));
     }
-    
-    public void writePlaylist(String name, String text) throws IOException
+
+    public void writePlaylist(String name, String[] tracks) throws IOException
     {
-        Files.write(OtherUtil.getPath(config.getPlaylistsFolder()+File.separator+name+".txt"), text.trim().getBytes());
+        ObjectNode playlistNode = (ObjectNode) objectMapper.readTree(new File(config.getPlaylistsFolder()+File.separator+name+".json"));
+        for (String track : tracks)
+        {
+            ((ArrayNode) playlistNode.get("tracks")).add(track);
+        }
+        objectMapper.writeValue(new File(OtherUtil.getPath(config.getPlaylistsFolder()+File.separator+name+".json").toString()), playlistNode);
     }
-    
+
     public Playlist getPlaylist(String name)
     {
         if(!getPlaylistNames().contains(name))
@@ -94,25 +110,15 @@ public class PlaylistLoader
         {
             if(folderExists())
             {
-                boolean[] shuffle = {false};
-                List<String> list = new ArrayList<>();
-                Files.readAllLines(OtherUtil.getPath(config.getPlaylistsFolder()+File.separator+name+".txt")).forEach(str -> 
-                {
-                    String s = str.trim();
-                    if(s.isEmpty())
-                        return;
-                    if(s.startsWith("#") || s.startsWith("//"))
-                    {
-                        s = s.replaceAll("\\s+", "");
-                        if(s.equalsIgnoreCase("#shuffle") || s.equalsIgnoreCase("//shuffle"))
-                            shuffle[0]=true;
-                    }
-                    else
-                        list.add(s);
-                });
-                if(shuffle[0])
-                    shuffle(list);
-                return new Playlist(name, list, shuffle[0]);
+                JsonNode playlistNode = objectMapper.readTree(new File(config.getPlaylistsFolder()+File.separator+name+".json"));
+
+                String tracksNode = playlistNode.get("tracks").toString();
+                List<String> list = Arrays.asList(objectMapper.readValue(tracksNode, String[].class));
+
+                boolean shuffle = playlistNode.get("shuffle").asBoolean();
+                if (shuffle) shuffle(list);
+
+                return new Playlist(name, list, shuffle);
             }
             else
             {
@@ -125,8 +131,8 @@ public class PlaylistLoader
             return null;
         }
     }
-    
-    
+
+
     private static <T> void shuffle(List<T> list)
     {
         for(int first =0; first<list.size(); first++)
@@ -137,8 +143,24 @@ public class PlaylistLoader
             list.set(second, tmp);
         }
     }
-    
-    
+
+
+    public int getUserPlaylistCount(String userId)
+    {
+        final int[] count = {0};
+        try {
+            this.getPlaylistNames().forEach((name) -> {
+                try {
+                    JsonNode playlistNode = objectMapper.readTree(new File(config.getPlaylistsFolder() + File.separator + name + ".json"));
+                    String playlistAuthorId = playlistNode.get("authorId").toString();
+                    if (Objects.equals(playlistAuthorId, userId)) count[0]++;
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+        return count[0];
+    }
+
+
     public class Playlist
     {
         private final String name;
@@ -147,14 +169,16 @@ public class PlaylistLoader
         private final List<AudioTrack> tracks = new LinkedList<>();
         private final List<PlaylistLoadError> errors = new LinkedList<>();
         private boolean loaded = false;
-        
+        private String authorId;
+        private String guildId;
+
         private Playlist(String name, List<String> items, boolean shuffle)
         {
             this.name = name;
             this.items = items;
             this.shuffle = shuffle;
         }
-        
+
         public void loadTracks(AudioPlayerManager manager, Consumer<AudioTrack> consumer, Runnable callback)
         {
             if(loaded)
@@ -164,7 +188,7 @@ public class PlaylistLoader
             {
                 boolean last = i+1 == items.size();
                 int index = i;
-                manager.loadItemOrdered(name, items.get(i), new AudioLoadResultHandler() 
+                manager.loadItemOrdered(name, items.get(i), new AudioLoadResultHandler()
                 {
                     private void done()
                     {
@@ -178,7 +202,7 @@ public class PlaylistLoader
                     }
 
                     @Override
-                    public void trackLoaded(AudioTrack at) 
+                    public void trackLoaded(AudioTrack at)
                     {
                         if(config.isTooLong(at))
                             errors.add(new PlaylistLoadError(index, items.get(index), "This track is longer than the allowed maximum"));
@@ -192,7 +216,7 @@ public class PlaylistLoader
                     }
 
                     @Override
-                    public void playlistLoaded(AudioPlaylist ap) 
+                    public void playlistLoaded(AudioPlaylist ap)
                     {
                         if(ap.isSearchResult())
                         {
@@ -222,14 +246,14 @@ public class PlaylistLoader
                     }
 
                     @Override
-                    public void noMatches() 
+                    public void noMatches()
                     {
                         errors.add(new PlaylistLoadError(index, items.get(index), "No matches found."));
                         done();
                     }
 
                     @Override
-                    public void loadFailed(FriendlyException fe) 
+                    public void loadFailed(FriendlyException fe)
                     {
                         errors.add(new PlaylistLoadError(index, items.get(index), "Failed to load track: "+fe.getLocalizedMessage()));
                         done();
@@ -237,12 +261,12 @@ public class PlaylistLoader
                 });
             }
         }
-        
+
         public void shuffleTracks()
         {
             shuffle(tracks);
         }
-        
+
         public String getName()
         {
             return name;
@@ -257,36 +281,44 @@ public class PlaylistLoader
         {
             return tracks;
         }
-        
+
         public List<PlaylistLoadError> getErrors()
         {
             return errors;
         }
+
+        public String getAuthorId() {
+            return authorId;
+        }
+
+        public String getGuildId() {
+            return guildId;
+        }
     }
-    
+
     public class PlaylistLoadError
     {
         private final int number;
         private final String item;
         private final String reason;
-        
+
         private PlaylistLoadError(int number, String item, String reason)
         {
             this.number = number;
             this.item = item;
             this.reason = reason;
         }
-        
+
         public int getIndex()
         {
             return number;
         }
-        
+
         public String getItem()
         {
             return item;
         }
-        
+
         public String getReason()
         {
             return reason;

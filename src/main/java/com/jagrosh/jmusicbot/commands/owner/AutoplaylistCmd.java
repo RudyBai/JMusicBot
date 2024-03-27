@@ -17,14 +17,15 @@ package com.jagrosh.jmusicbot.commands.owner;
 
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jmusicbot.Bot;
-import com.jagrosh.jmusicbot.commands.OwnerCommand;
+import com.jagrosh.jmusicbot.commands.PlaylistCommand;
 import com.jagrosh.jmusicbot.settings.Settings;
+import net.dv8tion.jda.api.entities.User;
 
 /**
  *
  * @author John Grosh <john.a.grosh@gmail.com>
  */
-public class AutoplaylistCmd extends OwnerCommand
+public class AutoplaylistCmd extends PlaylistCommand
 {
     private final Bot bot;
     
@@ -57,12 +58,19 @@ public class AutoplaylistCmd extends OwnerCommand
         if(bot.getPlaylistLoader().getPlaylist(pname)==null)
         {
             event.reply(event.getClient().getError()+" Could not find `"+pname+".txt`!");
+            return;
         }
-        else
-        {
-            Settings settings = event.getClient().getSettingsFor(event.getGuild());
-            settings.setDefaultPlaylist(pname);
-            event.reply(event.getClient().getSuccess()+" The default playlist for **"+event.getGuild().getName()+"** is now `"+pname+"`");
-        }
+
+        if (userIsNotAllowedToSetDefaultPlaylist(event.getAuthor()))
+            event.reply("You are not allowed to set the default playlist!");
+
+        Settings settings = event.getClient().getSettingsFor(event.getGuild());
+        settings.setDefaultPlaylist(pname);
+        event.reply(event.getClient().getSuccess()+" The default playlist for **"+event.getGuild().getName()+"** is now `"+pname+"`");
+    }
+
+    private boolean userIsNotAllowedToSetDefaultPlaylist(User user)
+    {
+        return !(user.getId().equals(Long.toString(bot.getConfig().getOwnerId())));
     }
 }
