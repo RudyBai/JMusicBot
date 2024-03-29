@@ -16,6 +16,8 @@
 package com.jagrosh.jmusicbot.commands.owner;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
 import com.jagrosh.jdautilities.command.Command;
@@ -238,6 +240,11 @@ public class PlaylistCmd extends PlaylistCommand
             }
             if (!event.getArgs().isEmpty()) {
                 Playlist playlist = bot.getPlaylistLoader().getPlaylist(event.getArgs());
+                if (playlist == null)
+                {
+                    event.reply("Playlist does not exist!");
+                    return;
+                }
                 StringBuilder builder = new StringBuilder(event.getClient().getSuccess() + " Tracks on `" + playlist.getName() + "`:\n");
                 playlist.getTracks().forEach(track -> builder.append("\n`").append(track.getIdentifier()).append("` "));
                 event.reply(builder.toString());

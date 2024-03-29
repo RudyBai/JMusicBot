@@ -118,7 +118,10 @@ public class PlaylistLoader
                 boolean shuffle = playlistNode.get("shuffle").asBoolean();
                 if (shuffle) shuffle(list);
 
-                return new Playlist(name, list, shuffle);
+                String authorId = playlistNode.get("authorId").toString();
+                String guildId = playlistNode.get("guildId").toString();
+
+                return new Playlist(name, list, shuffle, authorId, guildId);
             }
             else
             {
@@ -169,14 +172,16 @@ public class PlaylistLoader
         private final List<AudioTrack> tracks = new LinkedList<>();
         private final List<PlaylistLoadError> errors = new LinkedList<>();
         private boolean loaded = false;
-        private String authorId;
-        private String guildId;
+        private final String authorId;
+        private final String guildId;
 
-        private Playlist(String name, List<String> items, boolean shuffle)
+        private Playlist(String name, List<String> items, boolean shuffle, String authorId, String guildId)
         {
             this.name = name;
             this.items = items;
             this.shuffle = shuffle;
+            this.authorId = authorId;
+            this.guildId = guildId;
         }
 
         public void loadTracks(AudioPlayerManager manager, Consumer<AudioTrack> consumer, Runnable callback)
