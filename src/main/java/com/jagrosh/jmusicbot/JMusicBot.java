@@ -30,14 +30,18 @@ import com.jagrosh.jmusicbot.settings.SettingsManager;
 import com.jagrosh.jmusicbot.utils.OtherUtil;
 import java.awt.Color;
 import java.util.Arrays;
-import javax.security.auth.login.LoginException;
+import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.*;
 import net.dv8tion.jda.api.entities.Activity;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import moe.kyokobot.libdave.NativeDaveFactory;
+import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ch.qos.logback.classic.Level;
 
 /**
  *
@@ -46,7 +50,7 @@ import org.slf4j.LoggerFactory;
 public class JMusicBot 
 {
     public final static Logger LOG = LoggerFactory.getLogger(JMusicBot.class);
-    public final static Permission[] RECOMMENDED_PERMS = {Permission.MESSAGE_READ, Permission.MESSAGE_WRITE, Permission.MESSAGE_HISTORY, Permission.MESSAGE_ADD_REACTION,
+    public final static Permission[] RECOMMENDED_PERMS = {Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND, Permission.MESSAGE_HISTORY, Permission.MESSAGE_ADD_REACTION,
                                 Permission.MESSAGE_EMBED_LINKS, Permission.MESSAGE_ATTACH_FILES, Permission.MESSAGE_MANAGE, Permission.MESSAGE_EXT_EMOJI,
                                 Permission.VOICE_CONNECT, Permission.VOICE_SPEAK, Permission.NICKNAME_CHANGE};
     public final static GatewayIntent[] INTENTS = {GatewayIntent.DIRECT_MESSAGES, GatewayIntent.GUILD_MESSAGES, GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.GUILD_VOICE_STATES};
@@ -82,6 +86,10 @@ public class JMusicBot
         if(!config.isValid())
             return;
         LOG.info("Loaded config from " + config.getConfigLocation());
+
+        // set log level from config
+        ((ch.qos.logback.classic.Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).setLevel(
+                Level.toLevel(config.getLogLevel(), Level.INFO));
         
         // set up the listener
         EventWaiter waiter = new EventWaiter();
@@ -108,17 +116,34 @@ public class JMusicBot
             }
         }
         
+        // Discord requires E2EE (the DAVE protocol) on voice connections. JDA's built-in
+        // passthrough session is rejected with close code 4017, so real libdave natives
+        // must be present or no audio will ever play.
+        try
+        {
+            NativeDaveFactory.ensureAvailable();
+        }
+        catch(Throwable t)
+        {
+            prompt.alert(Prompt.Level.ERROR, "JMusicBot", "Could not load the libdave natives, which Discord now "
+                    + "requires for voice connections: " + t
+                    + "\nEnsure the moe.kyokobot.libdave natives artifact for this platform is on the classpath.");
+            System.exit(1);
+        }
+
         // attempt to log in and start
         try
         {
             JDA jda = JDABuilder.create(config.getToken(), Arrays.asList(INTENTS))
                     .enableCache(CacheFlag.MEMBER_OVERRIDES, CacheFlag.VOICE_STATE)
-                    .disableCache(CacheFlag.ACTIVITY, CacheFlag.CLIENT_STATUS, CacheFlag.EMOTE, CacheFlag.ONLINE_STATUS)
+                    .disableCache(CacheFlag.ACTIVITY, CacheFlag.CLIENT_STATUS, CacheFlag.EMOJI, CacheFlag.ONLINE_STATUS)
                     .setActivity(config.isGameNone() ? null : Activity.playing("loading..."))
                     .setStatus(config.getStatus()==OnlineStatus.INVISIBLE || config.getStatus()==OnlineStatus.OFFLINE 
                             ? OnlineStatus.INVISIBLE : OnlineStatus.DO_NOT_DISTURB)
                     .addEventListeners(client, waiter, new Listener(bot))
                     .setBulkDeleteSplittingEnabled(true)
+                    .setAudioModuleConfig(new AudioModuleConfig()
+                            .withDaveSessionFactory(new LDJDADaveSessionFactory(new NativeDaveFactory())))
                     .build();
             bot.setJDA(jda);
 
@@ -137,12 +162,12 @@ public class JMusicBot
             // message content intent
             if(!"@mention".equals(config.getPrefix()))
             {
-                prompt.alert(Prompt.Level.INFO, "JMusicBot", "You currently have a custom prefix set. "
+                LOG.info("JMusicBot", "You currently have a custom prefix set. "
                         + "If your prefix is not working, make sure that the 'MESSAGE CONTENT INTENT' is Enabled "
                         + "on https://discord.com/developers/applications/" + jda.getSelfUser().getId() + "/bot");
             }
         }
-        catch (LoginException ex)
+        catch (InvalidTokenException ex)
         {
             prompt.alert(Prompt.Level.ERROR, "JMusicBot", ex + "\nPlease make sure you are "
                     + "editing the correct config.txt file, and that you have used the "
@@ -194,6 +219,7 @@ public class JMusicBot
                         new RemoveCmd(bot),
                         new SearchCmd(bot),
                         new SCSearchCmd(bot),
+                        new SeekCmd(bot),
                         new ShuffleCmd(bot),
                         new SkipCmd(bot),
 
