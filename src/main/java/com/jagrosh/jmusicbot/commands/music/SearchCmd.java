@@ -39,7 +39,7 @@ import net.dv8tion.jda.api.entities.Message;
  */
 public class SearchCmd extends MusicCommand 
 {
-    protected String searchPrefix = "ytsearch:";
+    protected String searchPrefix = "scsearch:";
     private final OrderedMenu.Builder builder;
     private final String searchingEmoji;
     
@@ -50,7 +50,7 @@ public class SearchCmd extends MusicCommand
         this.name = "search";
         this.aliases = bot.getConfig().getAliases(this.name);
         this.arguments = "<query>";
-        this.help = "searches Youtube for a provided query";
+        this.help = "searches SoundCloud for a provided query";
         this.beListening = true;
         this.bePlaying = false;
         this.botPermissions = new Permission[]{Permission.MESSAGE_EMBED_LINKS};
@@ -141,7 +141,9 @@ public class SearchCmd extends MusicCommand
         @Override
         public void loadFailed(FriendlyException throwable) 
         {
-            if(throwable.severity==Severity.COMMON)
+            if(FormatUtil.isYoutubeFailure(throwable))
+                m.editMessage(event.getClient().getError()+" "+FormatUtil.YOUTUBE_UNSUPPORTED).queue();
+            else if(throwable.severity==Severity.COMMON)
                 m.editMessage(event.getClient().getError()+" Error loading: "+throwable.getMessage()).queue();
             else
                 m.editMessage(event.getClient().getError()+" Error loading track.").queue();

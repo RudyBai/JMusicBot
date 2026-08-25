@@ -29,15 +29,18 @@ import java.util.regex.Pattern;
  */
 public class RequestMetadata
 {
-    public static final RequestMetadata EMPTY = new RequestMetadata(null, null);
+    public static final RequestMetadata EMPTY = new RequestMetadata(null, null, 0L);
     
     public final UserInfo user;
     public final RequestInfo requestInfo;
+    /** channel the request came from, so playback failures can be reported back there */
+    public final long channelId;
     
-    public RequestMetadata(User user, RequestInfo requestInfo)
+    public RequestMetadata(User user, RequestInfo requestInfo, long channelId)
     {
         this.user = user == null ? null : new UserInfo(user.getIdLong(), user.getName(), user.getDiscriminator(), user.getEffectiveAvatarUrl());
         this.requestInfo = requestInfo;
+        this.channelId = channelId;
     }
     
     public long getOwner()
@@ -47,7 +50,7 @@ public class RequestMetadata
 
     public static RequestMetadata fromResultHandler(AudioTrack track, CommandEvent event)
     {
-        return new RequestMetadata(event.getAuthor(), new RequestInfo(event.getArgs(), track.getInfo().uri));
+        return new RequestMetadata(event.getAuthor(), new RequestInfo(event.getArgs(), track.getInfo().uri), event.getChannel().getIdLong());
     }
     
     public static class RequestInfo

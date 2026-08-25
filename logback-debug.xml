@@ -1,0 +1,35 @@
+<!--
+  Targeted debug logging for JMusicBot voice/audio troubleshooting.
+
+  Usage:
+      java -Dnogui=true -Dlogback.configurationFile=logback-debug.xml \
+           -jar target/JMusicBot-Snapshot-All.jar
+
+  Only the voice internals are set to DEBUG, so the bot token cannot leak the way
+  it can with a blanket `loglevel = debug` (which also turns on JDA's REST logging).
+
+  Note: JMusicBot resets the ROOT level from config.txt's `loglevel` at startup,
+  but explicit per-logger levels below still win, so these stay at DEBUG.
+-->
+<configuration>
+    <appender name="Simple" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%nopex[%d{HH:mm:ss}] [%level] [%logger{0}]: %msg%n%ex</pattern>
+        </encoder>
+    </appender>
+
+    <!-- voice gateway: DAVE negotiation, encryption mode, close codes -->
+    <logger name="net.dv8tion.jda.internal.audio" level="DEBUG"/>
+    <logger name="net.dv8tion.jda.api.audio" level="DEBUG"/>
+    <logger name="moe.kyokobot.libdave" level="DEBUG"/>
+    <!-- gateway event handling: shows reaction events and unresolved user/member lookups -->
+    <logger name="net.dv8tion.jda.internal.handle" level="DEBUG"/>
+    <logger name="com.jagrosh.jdautilities" level="DEBUG"/>
+    <!-- uncomment for track loading/streaming detail -->
+    <!-- <logger name="com.sedmelluq.discord.lavaplayer" level="DEBUG"/> -->
+    <!-- <logger name="dev.lavalink.youtube" level="DEBUG"/> -->
+
+    <root level="INFO">
+        <appender-ref ref="Simple"/>
+    </root>
+</configuration>

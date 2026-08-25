@@ -40,6 +40,7 @@ import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
 import org.slf4j.LoggerFactory;
@@ -172,6 +173,23 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) 
     {
+        // SoundCloud serves 30s snippets for label-owned uploads (API policy "SNIP") while
+        // still reporting the full duration, so the track "finishes" normally after half a
+        // minute. Without this the bot just stops and leaves, looking like a crash.
+        if(endReason == AudioTrackEndReason.FINISHED && !track.getInfo().isStream
+                && track.getDuration() > 0 && track.getPosition() > 0
+                && track.getPosition() < track.getDuration() * 9 / 10)
+        {
+            LoggerFactory.getLogger("AudioHandler").warn("Track " + track.getIdentifier() + " ended early: "
+                    + track.getPosition() + "ms played of " + track.getDuration() + "ms reported");
+            notifyRequester(track, manager.getBot().getConfig().getWarning() + " **"
+                    + FormatUtil.filter(track.getInfo().title == null ? track.getIdentifier() : track.getInfo().title)
+                    + "** ended early \u2014 only " + TimeUtil.formatTime(track.getPosition())
+                    + " of " + TimeUtil.formatTime(track.getDuration()) + " was available.\n"
+                    + "SoundCloud only provides a 30-second preview for some official uploads. "
+                    + "Search again and pick a different result, which is usually full length.");
+        }
+
         RepeatMode repeatMode = manager.getBot().getSettingsManager().getSettings(guildId).getRepeatMode();
         // if the track ended normally, and we're in repeat mode, re-add it to the queue
         if(endReason==AudioTrackEndReason.FINISHED && repeatMode != RepeatMode.OFF)
@@ -205,6 +223,54 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler
     @Override
     public void onTrackException(AudioPlayer player, AudioTrack track, FriendlyException exception) {
         LoggerFactory.getLogger("AudioHandler").error("Track " + track.getIdentifier() + " has failed to play", exception);
+
+        // Without this the bot just goes quiet and leaves once the queue drains, which
+        // looks identical to a crash. Tell whoever asked for the track what happened.
+        String error = manager.getBot().getConfig().getError();
+        String title = track.getInfo().title == null ? track.getIdentifier() : track.getInfo().title;
+        String message = FormatUtil.isYoutubeTrack(track) || FormatUtil.isYoutubeFailure(exception)
+                ? error + " Couldn't play **" + FormatUtil.filter(title) + "**\n" + FormatUtil.YOUTUBE_UNSUPPORTED
+                : error + " Couldn't play **" + FormatUtil.filter(title) + "**: " + exception.getMessage();
+        notifyRequester(track, message);
+    }
+
+    @Override
+    public void onTrackStuck(AudioPlayer player, AudioTrack track, long thresholdMs)
+    {
+        // This was previously unhandled, so a stalled stream was indistinguishable from
+        // silence: the bot stayed connected and simply stopped producing audio forever.
+        LoggerFactory.getLogger("AudioHandler").warn("Track " + track.getIdentifier()
+                + " produced no audio for " + thresholdMs + "ms; skipping it");
+        notifyRequester(track, manager.getBot().getConfig().getWarning() + " **"
+                + FormatUtil.filter(track.getInfo().title == null ? track.getIdentifier() : track.getInfo().title)
+                + "** stopped sending audio, so it was skipped.");
+        // onTrackEnd advances the queue regardless of end reason, so this moves on
+        // rather than sitting connected and silent
+        player.stopTrack();
+    }
+
+    /**
+     * Sends a message back to the channel the track was requested from, falling back to
+     * the guild's configured text channel. Failures here are deliberately swallowed:
+     * reporting a playback problem must never create a second one.
+     */
+    private void notifyRequester(AudioTrack track, String message)
+    {
+        try
+        {
+            Guild guild = guild(manager.getBot().getJDA());
+            RequestMetadata rm = track.getUserData(RequestMetadata.class);
+            TextChannel tc = rm == null || rm.channelId == 0L ? null : guild.getTextChannelById(rm.channelId);
+            if(tc == null)
+                tc = manager.getBot().getSettingsManager().getSettings(guild).getTextChannel(guild);
+            if(tc != null && tc.canTalk())
+                tc.sendMessage(message).queue(null,
+                        e -> LoggerFactory.getLogger("AudioHandler").warn("Could not report playback problem: " + e));
+        }
+        catch(Exception ex)
+        {
+            LoggerFactory.getLogger("AudioHandler").warn("Could not report playback problem: " + ex);
+        }
     }
 
     @Override

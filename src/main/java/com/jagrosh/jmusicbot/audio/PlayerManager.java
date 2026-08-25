@@ -30,6 +30,10 @@ import com.sedmelluq.discord.lavaplayer.source.soundcloud.SoundCloudAudioSourceM
 import com.sedmelluq.discord.lavaplayer.source.twitch.TwitchStreamAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.vimeo.VimeoAudioSourceManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
+import dev.lavalink.youtube.clients.AndroidVr;
+import dev.lavalink.youtube.clients.Tv;
+import dev.lavalink.youtube.clients.Web;
+import dev.lavalink.youtube.clients.WebEmbedded;
 import net.dv8tion.jda.api.entities.Guild;
 
 /**
@@ -49,7 +53,16 @@ public class PlayerManager extends DefaultAudioPlayerManager
     {
         TransformativeAudioSourceManager.createTransforms(bot.getConfig().getTransforms()).forEach(t -> registerSourceManager(t));
 
-        YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(true);
+        // Client order matters: ANDROID_VR streams ordinary videos with no auth, TV is the
+        // only OAuth-capable client and is the sole way to play login-gated videos (VEVO,
+        // age-restricted), and WEB/WEB_EMBEDDED stay on as metadata/search fallbacks.
+        YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(true,
+                new AndroidVr(), new Tv(), new Web(), new WebEmbedded());
+        String ytOauthToken = bot.getConfig().getYtOauthToken();
+        if(ytOauthToken != null && !ytOauthToken.isEmpty())
+            yt.useOauth2(ytOauthToken, true);
+        else if(bot.getConfig().useYtOauthPrompt())
+            yt.useOauth2(null, false); // runs the device-code flow and logs a refresh token
         yt.setPlaylistPageCount(bot.getConfig().getMaxYTPlaylistPages());
         registerSourceManager(yt);
 

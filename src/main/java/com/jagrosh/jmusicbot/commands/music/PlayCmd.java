@@ -96,13 +96,13 @@ public class PlayCmd extends MusicCommand
     {
         private final Message m;
         private final CommandEvent event;
-        private final boolean ytsearch;
+        private final boolean searched;
         
-        private ResultHandler(Message m, CommandEvent event, boolean ytsearch)
+        private ResultHandler(Message m, CommandEvent event, boolean searched)
         {
             this.m = m;
             this.event = event;
-            this.ytsearch = ytsearch;
+            this.searched = searched;
         }
         
         private void loadSingle(AudioTrack track, AudioPlaylist playlist)
@@ -199,16 +199,18 @@ public class PlayCmd extends MusicCommand
         @Override
         public void noMatches()
         {
-            if(ytsearch)
+            if(searched)
                 m.editMessage(FormatUtil.filter(event.getClient().getWarning()+" No results found for `"+event.getArgs()+"`.")).queue();
             else
-                bot.getPlayerManager().loadItemOrdered(event.getGuild(), "ytsearch:"+event.getArgs(), new ResultHandler(m,event,true));
+                bot.getPlayerManager().loadItemOrdered(event.getGuild(), "scsearch:"+event.getArgs(), new ResultHandler(m,event,true));
         }
 
         @Override
         public void loadFailed(FriendlyException throwable)
         {
-            if(throwable.severity==Severity.COMMON)
+            if(FormatUtil.isYoutubeFailure(throwable))
+                m.editMessage(event.getClient().getError()+" "+FormatUtil.YOUTUBE_UNSUPPORTED).queue();
+            else if(throwable.severity==Severity.COMMON)
                 m.editMessage(event.getClient().getError()+" Error loading: "+throwable.getMessage()).queue();
             else
                 m.editMessage(event.getClient().getError()+" Error loading track.").queue();

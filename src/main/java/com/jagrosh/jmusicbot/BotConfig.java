@@ -45,6 +45,8 @@ public class BotConfig
     private boolean stayInChannel, songInGame, npImages, updatealerts, useEval, dbots;
     private long owner, maxSeconds, aloneTimeUntilStop;
     private int maxYTPlaylistPages;
+    private String ytOauthToken;
+    private boolean ytOauthPrompt;
     private double skipratio;
     private OnlineStatus status;
     private Activity game;
@@ -93,6 +95,8 @@ public class BotConfig
             evalEngine = config.getString("evalengine");
             maxSeconds = config.getLong("maxtime");
             maxYTPlaylistPages = config.getInt("maxytplaylistpages");
+            ytOauthToken = config.getString("ytoauthtoken");
+            ytOauthPrompt = config.getBoolean("ytoauthprompt");
             aloneTimeUntilStop = config.getLong("alonetimeuntilstop");
             playlistsFolder = config.getString("playlistsfolder");
             aliases = config.getConfig("aliases");
@@ -346,6 +350,16 @@ public class BotConfig
     public int getMaxYTPlaylistPages()
     {
         return maxYTPlaylistPages;
+    }
+    
+    public String getYtOauthToken()
+    {
+        return ytOauthToken;
+    }
+    
+    public boolean useYtOauthPrompt()
+    {
+        return ytOauthPrompt;
     }
     
     public String getMaxTime()

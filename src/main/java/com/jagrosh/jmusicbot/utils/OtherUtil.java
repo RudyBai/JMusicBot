@@ -40,10 +40,18 @@ import org.json.JSONTokener;
  */
 public class OtherUtil
 {
-    public final static String NEW_VERSION_AVAILABLE = "There is a new version of JMusicBot available!\n"
-                    + "Current version: %s\n"
-                    + "New Version: %s\n\n"
-                    + "Please visit https://github.com/jagrosh/MusicBot/releases/latest to get the latest release.";
+    /**
+     * The upstream jagrosh/MusicBot release this fork branched from.
+     *
+     * The update check compares upstream's newest release against this branch point
+     * rather than against our own version, which no longer matches any upstream tag.
+     */
+    public final static String UPSTREAM_BASE_VERSION = "0.4.3";
+
+    public final static String NEW_VERSION_AVAILABLE = "There is a new upstream version of JMusicBot available!\n"
+                    + "This fork branched from: %s\n"
+                    + "Latest upstream release: %s\n\n"
+                    + "Please visit https://github.com/jagrosh/MusicBot/releases/latest to see what changed.";
     private final static String WINDOWS_INVALID_PATH = "c:\\windows\\system32\\";
     
     /**
@@ -163,15 +171,12 @@ public class OtherUtil
     
     public static void checkVersion(Prompt prompt)
     {
-        // Get current version number
-        String version = getCurrentVersion();
-        
-        // Check for new version
+        // Check upstream for anything newer than the release this fork branched from
         String latestVersion = getLatestVersion();
         
-        if(latestVersion!=null && !latestVersion.equals(version))
+        if(latestVersion!=null && !latestVersion.equals(UPSTREAM_BASE_VERSION))
         {
-            prompt.alert(Prompt.Level.WARNING, "JMusicBot Version", String.format(NEW_VERSION_AVAILABLE, version, latestVersion));
+            prompt.alert(Prompt.Level.WARNING, "JMusicBot Version", String.format(NEW_VERSION_AVAILABLE, UPSTREAM_BASE_VERSION, latestVersion));
         }
     }
     

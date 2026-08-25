@@ -17,6 +17,7 @@ package com.jagrosh.jmusicbot.utils;
 
 import com.jagrosh.jmusicbot.audio.RequestMetadata.UserInfo;
 import java.util.List;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.User;
@@ -102,6 +103,42 @@ public class FormatUtil {
         return out;
     }
     
+    /**
+     * Shown when a track cannot be played because it came from YouTube.
+     *
+     * YouTube serves bot clients server-side ABR streams that lavaplayer cannot read,
+     * and refuses official music videos and age-restricted uploads outright, so these
+     * failures are permanent rather than transient.
+     */
+    public static final String YOUTUBE_UNSUPPORTED =
+            "YouTube playback isn't supported. YouTube blocks bots from streaming most "
+            + "videos \u2014 official music videos and age-restricted uploads in particular.\n"
+            + "SoundCloud works fully: searching without a link uses SoundCloud, or paste a "
+            + "SoundCloud link directly.";
+
+    /**
+     * @return true if the throwable (or any of its causes) came out of the YouTube source
+     */
+    public static boolean isYoutubeFailure(Throwable throwable)
+    {
+        Throwable cause = throwable;
+        for(int depth = 0; cause != null && depth < 16; depth++)
+        {
+            if(cause.getClass().getName().startsWith("dev.lavalink.youtube"))
+                return true;
+            if(cause.getCause() == cause)
+                break;
+            cause = cause.getCause();
+        }
+        return false;
+    }
+
+    public static boolean isYoutubeTrack(AudioTrack track)
+    {
+        return track != null && track.getSourceManager() != null
+                && "youtube".equalsIgnoreCase(track.getSourceManager().getSourceName());
+    }
+
     public static String filter(String input)
     {
         return input.replace("\u202E","")
