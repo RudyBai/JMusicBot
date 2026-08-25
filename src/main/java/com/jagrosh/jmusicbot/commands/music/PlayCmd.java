@@ -164,7 +164,26 @@ public class PlayCmd extends MusicCommand
         {
             if(playlist.getTracks().size()==1 || playlist.isSearchResult())
             {
-                AudioTrack single = playlist.getSelectedTrack()==null ? playlist.getTracks().get(0) : playlist.getSelectedTrack();
+                AudioTrack single;
+                if(playlist.getSelectedTrack() != null)
+                    single = playlist.getSelectedTrack();
+                else if(playlist.isSearchResult())
+                {
+                    // skip SoundCloud previews: they only stream ~30s despite reporting
+                    // the full duration. Explicit links/playlists are left alone.
+                    single = playlist.getTracks().stream()
+                            .filter(t -> !FormatUtil.isSnippedSoundCloud(t))
+                            .findFirst().orElse(null);
+                    if(single == null)
+                    {
+                        m.editMessage(FormatUtil.filter(event.getClient().getWarning()
+                                + " Every result for `" + event.getArgs() + "` is a 30-second preview, "
+                                + "which SoundCloud does for some official uploads. Try a different search.")).queue();
+                        return;
+                    }
+                }
+                else
+                    single = playlist.getTracks().get(0);
                 loadSingle(single, null);
             }
             else if (playlist.getSelectedTrack()!=null)

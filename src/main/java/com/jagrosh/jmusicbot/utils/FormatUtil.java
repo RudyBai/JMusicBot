@@ -133,6 +133,22 @@ public class FormatUtil {
         return false;
     }
 
+    /**
+     * SoundCloud serves a 30-second snippet for label-owned uploads (API policy "SNIP").
+     * lavaplayer resolves those to a /preview/ media URL while still reporting the track's
+     * full duration, so the media URL is the only signal available before playback starts.
+     *
+     * @return true if this track would only play a short preview
+     */
+    public static boolean isSnippedSoundCloud(AudioTrack track)
+    {
+        if(track == null || track.getSourceManager() == null
+                || !"soundcloud".equalsIgnoreCase(track.getSourceManager().getSourceName()))
+            return false;
+        String identifier = track.getIdentifier();
+        return identifier != null && identifier.contains("/preview/");
+    }
+
     public static boolean isYoutubeTrack(AudioTrack track)
     {
         return track != null && track.getSourceManager() != null

@@ -22,7 +22,9 @@ import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jdautilities.menu.OrderedMenu;
 import com.jagrosh.jmusicbot.Bot;
@@ -103,12 +105,24 @@ public class SearchCmd extends MusicCommand
         @Override
         public void playlistLoaded(AudioPlaylist playlist)
         {
+            // SoundCloud only streams 30s of label-owned uploads, so offering them as
+            // choices just wastes a pick: they play for half a minute and stop.
+            List<AudioTrack> results = playlist.getTracks().stream()
+                    .filter(t -> !FormatUtil.isSnippedSoundCloud(t))
+                    .collect(Collectors.toList());
+            if(results.isEmpty())
+            {
+                m.editMessage(FormatUtil.filter(event.getClient().getWarning()
+                        + " Every result for `" + event.getArgs() + "` is a 30-second preview, "
+                        + "which SoundCloud does for some official uploads. Try a different search.")).queue();
+                return;
+            }
             builder.setColor(event.getSelfMember().getColor())
                     .setText(FormatUtil.filter(event.getClient().getSuccess()+" Search results for `"+event.getArgs()+"`:"))
                     .setChoices(new String[0])
                     .setSelection((msg,i) -> 
                     {
-                        AudioTrack track = playlist.getTracks().get(i-1);
+                        AudioTrack track = results.get(i-1);
                         if(bot.getConfig().isTooLong(track))
                         {
                             event.replyWarning("This track (**"+track.getInfo().title+"**) is longer than the allowed maximum: `"
@@ -124,9 +138,9 @@ public class SearchCmd extends MusicCommand
                     .setCancel((msg) -> {})
                     .setUsers(event.getAuthor())
                     ;
-            for(int i=0; i<4 && i<playlist.getTracks().size(); i++)
+            for(int i=0; i<4 && i<results.size(); i++)
             {
-                AudioTrack track = playlist.getTracks().get(i);
+                AudioTrack track = results.get(i);
                 builder.addChoices("`["+ TimeUtil.formatTime(track.getDuration())+"]` [**"+track.getInfo().title+"**]("+track.getInfo().uri+")");
             }
             builder.build().display(m);
